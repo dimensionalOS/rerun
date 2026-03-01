@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use custom_callback::comms::viewer::ControlViewer;
-use custom_callback::interaction::{ViewerEvent, ViewerEventSender};
+use custom_callback::interaction::{LcmPublisher, click_event_from_ms};
 use custom_callback::panel::Control;
 use rerun::external::{eframe, re_crash_handler, re_grpc_server, re_log, re_memory, re_viewer};
 
@@ -16,8 +16,8 @@ static GLOBAL: re_memory::AccountingAllocator<mimalloc::MiMalloc> =
 
 /// Port used for control messages (old protocol)
 const CONTROL_PORT: u16 = 8889;
-/// Port used for sending click events to Python bridge (new protocol)
-const BRIDGE_PORT: u16 = 8888;
+/// LCM channel for click events (follows RViz convention)
+const LCM_CHANNEL: &str = "/clicked_point#geometry_msgs.PointStamped";
 /// Minimum time between click events (debouncing)
 const CLICK_DEBOUNCE_MS: u64 = 100;
 /// Maximum rapid clicks to log as warning
@@ -34,7 +34,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     re_crash_handler::install_crash_handlers(re_viewer::build_info());
 
     // Listen for gRPC connections from Rerun's logging SDKs.
-    // There are other ways of "feeding" the viewer though - all you need is a `re_log_channel::LogReceiver`.
     let rx_log = re_grpc_server::spawn_with_recv(
         "0.0.0.0:9877".parse()?,
         Default::default(),
@@ -50,19 +49,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         viewer.run().await;
     });
 
-    // Create ViewerEventSender for sending click events to Python bridge (port 8888)
-    let event_sender = ViewerEventSender::new(format!("127.0.0.1:{BRIDGE_PORT}"));
-    let event_sender_handle = event_sender.handle();
-    
-    // Spawn the event sender
-    tokio::spawn(async move {
-        event_sender.run().await;
-    });
+    // Create LCM publisher for click events (replaces TCP ViewerEventSender)
+    let lcm_publisher = LcmPublisher::new(LCM_CHANNEL.to_string())
+        .expect("Failed to create LCM publisher");
+    re_log::info!("LCM publisher created for channel: {}", LCM_CHANNEL);
 
     // State for debouncing and rapid click detection
     let last_click_time = Rc::new(RefCell::new(Instant::now()));
     let rapid_click_count = Rc::new(RefCell::new(0usize));
-    
+
     // Then we start the Rerun viewer
     let mut native_options = re_viewer::native::eframe_options(None);
     native_options.viewport = native_options
@@ -76,32 +71,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         on_event: Some(Rc::new({
             let last_click_time = last_click_time.clone();
             let rapid_click_count = rapid_click_count.clone();
-            
+
             move |event: re_viewer::ViewerEvent| {
                 // Handle selection changes with position data
                 if let re_viewer::ViewerEventKind::SelectionChange { items } = event.kind {
                     let mut has_position = false;
                     let mut no_position_count = 0;
-                    
+
                     for item in items {
                         match item {
                             re_viewer::SelectionChangeItem::Entity {
                                 entity_path,
-                                view_name,
+                                view_name: _,
                                 position: Some(pos),
                                 ..
                             } => {
                                 has_position = true;
-                                
+
                                 // Debouncing: check time since last click
                                 let now = Instant::now();
                                 let elapsed = now.duration_since(*last_click_time.borrow());
-                                
+
                                 if elapsed < Duration::from_millis(CLICK_DEBOUNCE_MS) {
-                                    // Rapid click detected
                                     let mut count = rapid_click_count.borrow_mut();
                                     *count += 1;
-                                    
+
                                     if *count == RAPID_CLICK_THRESHOLD {
                                         re_log::warn!(
                                             "Rapid click detected ({} clicks within {}ms). Events may be dropped.",
@@ -109,56 +103,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             CLICK_DEBOUNCE_MS
                                         );
                                     }
-                                    
+
                                     // Skip this click event (debounced)
                                     continue;
                                 } else {
-                                    // Reset rapid click counter
                                     *rapid_click_count.borrow_mut() = 0;
                                 }
-                                
-                                // Update last click time
+
                                 *last_click_time.borrow_mut() = now;
-                                
+
                                 // Get current timestamp
                                 let timestamp_ms = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
                                     .unwrap_or_default()
                                     .as_millis() as u64;
 
-                                // Convert to ViewerEvent::Click
-                                let click_event = ViewerEvent::Click {
-                                    position: [pos.x, pos.y, pos.z],
-                                    entity_path: Some(entity_path.to_string()),
-                                    view_id: view_name.unwrap_or_else(|| "unknown_view".to_string()),
+                                // Build click event and publish via LCM
+                                let click = click_event_from_ms(
+                                    [pos.x, pos.y, pos.z],
+                                    &entity_path.to_string(),
                                     timestamp_ms,
-                                    is_2d: pos.z.abs() < 0.001, // Heuristic: if z is near 0, it's 2D
-                                };
+                                );
 
-                                // Send to Python bridge
-                                if let Err(err) = event_sender_handle.send(click_event) {
-                                    re_log::error!("Failed to send click event: {:?}", err);
-                                } else {
-                                    re_log::debug!(
-                                        "Click event sent: entity={}, pos=({:.2}, {:.2}, {:.2})",
-                                        entity_path,
-                                        pos.x,
-                                        pos.y,
-                                        pos.z
-                                    );
+                                match lcm_publisher.publish(&click) {
+                                    Ok(_) => {
+                                        re_log::debug!(
+                                            "LCM click event published: entity={}, pos=({:.2}, {:.2}, {:.2})",
+                                            entity_path,
+                                            pos.x,
+                                            pos.y,
+                                            pos.z
+                                        );
+                                    }
+                                    Err(err) => {
+                                        re_log::error!("Failed to publish LCM click event: {:?}", err);
+                                    }
                                 }
                             }
                             re_viewer::SelectionChangeItem::Entity { position: None, .. } => {
-                                // Entity selection without position data (hover, keyboard nav, etc.)
                                 no_position_count += 1;
                             }
-                            _ => {
-                                // Other selection types (space view, data result, etc.)
-                            }
+                            _ => {}
                         }
                     }
-                    
-                    // Log edge cases for debugging
+
                     if !has_position && no_position_count > 0 {
                         re_log::trace!(
                             "Selection change without position data ({} items). This is normal for hover/keyboard navigation.",
@@ -170,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })),
         ..Default::default()
     };
-    
+
     let window_title = "Rerun Interactive Viewer";
     eframe::run_native(
         window_title,
