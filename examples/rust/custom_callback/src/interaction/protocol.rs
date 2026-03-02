@@ -1,4 +1,3 @@
-use std::io::{self, ErrorKind};
 use serde::{Deserialize, Serialize};
 
 /// Events sent from the viewer to the application.
@@ -12,62 +11,12 @@ pub enum ViewerEvent {
         timestamp_ms: u64,
         is_2d: bool,
     },
-    
-    /// Waypoint sequence completed.
-    WaypointComplete {
-        waypoints: Vec<[f32; 3]>,
-    },
-    
-    /// Interaction mode changed.
-    ModeChanged {
-        mode: String,
-    },
-    
-    /// Viewer is disconnecting.
-    Disconnect,
-}
-
-/// Commands sent from the application to the viewer.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum AppCommand {
-    /// Change the interaction mode.
-    SetMode {
-        mode: String,
-    },
-    
-    /// Clear all waypoint markers.
-    ClearWaypoints,
-    
-    /// Set the cursor style.
-    SetCursor {
-        cursor: String,
-    },
-}
-
-impl ViewerEvent {
-    pub fn encode(&self) -> io::Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))
-    }
-    
-    pub fn decode(data: &[u8]) -> io::Result<Self> {
-        bincode::deserialize(data).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))
-    }
-}
-
-impl AppCommand {
-    pub fn encode(&self) -> io::Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))
-    }
-    
-    pub fn decode(data: &[u8]) -> io::Result<Self> {
-        bincode::deserialize(data).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_viewer_event_click_roundtrip() {
         let event = ViewerEvent::Click {
@@ -77,10 +26,10 @@ mod tests {
             timestamp_ms: 1234567890,
             is_2d: false,
         };
-        
-        let encoded = event.encode().unwrap();
-        let decoded = ViewerEvent::decode(&encoded).unwrap();
-        
+
+        let encoded = bincode::serialize(&event).unwrap();
+        let decoded: ViewerEvent = bincode::deserialize(&encoded).unwrap();
+
         assert_eq!(event, decoded);
     }
 }
