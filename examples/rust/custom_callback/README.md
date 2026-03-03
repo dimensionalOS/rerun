@@ -61,7 +61,7 @@ Click events are published on the LCM channel `/clicked_point#geometry_msgs.Poin
 
 ## Versioning
 
-dimos-viewer uses independent semantic versioning starting at 0.1.0.
+dimos-viewer tracks Rerun's version. Version 0.30.0a1 is based on Rerun 0.30.0-alpha.1.
 
 | dimos-viewer | Based on Rerun |
 |-------------|----------------|
