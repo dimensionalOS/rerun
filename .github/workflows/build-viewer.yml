@@ -138,7 +138,8 @@ jobs:
         if: matrix.container != ''
         run: |
           . "$HOME/.cargo/env"
-          pip3 install maturin>=1.8.1
+          python3 -m pip install --upgrade pip
+          python3 -m pip install maturin>=1.8.1
 
       - name: Build wheel (manylinux)
         if: matrix.container != ''
@@ -158,6 +159,12 @@ jobs:
         run: |
           rustup install
           rustup show active-toolchain
+
+      - name: Set up Python (macOS)
+        if: matrix.container == ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
       - name: Install maturin (macOS)
         if: matrix.container == ''
