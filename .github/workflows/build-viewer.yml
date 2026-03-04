@@ -159,7 +159,6 @@ jobs:
             --manifest-path "${{ env.PACKAGE_DIR }}/Cargo.toml" \
             --target "${{ matrix.target }}" \
             --compatibility "${{ matrix.compatibility }}" \
-            -i /opt/python/cp310-cp310/bin/python3 \
             --out dist/
 
       # --- macOS (native runner) ---
