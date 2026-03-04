@@ -1,7 +1,8 @@
 # Build & publish dimos-viewer wheels.
 #
 # Closely follows Rerun's reusable_build_and_upload_wheels.yml pattern:
-#   - manylinux_2_28 Docker container for Linux builds (same as Rerun)
+#   - manylinux_2_28 Docker container for Linux builds
+#   - Same system deps as Rerun's ci_docker Dockerfile
 #   - Same Rust toolchain (from rust-toolchain file)
 #   - Same shell defaults and env conventions
 #   - GitHub Artifacts instead of GCS for wheel storage
@@ -78,7 +79,7 @@ jobs:
 
   # -------------------------------------------------------------------
   # 2. Build wheels per platform
-  #    Linux: manylinux_2_28 Docker container (matches Rerun's ci_docker)
+  #    Linux: manylinux_2_28 container with Rerun's exact deps
   #    macOS: native runner
   # -------------------------------------------------------------------
   build-wheel:
@@ -92,7 +93,7 @@ jobs:
           - platform: linux-x64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            container: ghcr.io/rerun-io/ci_docker:0.17.0
+            container: quay.io/pypa/manylinux_2_28_x86_64
             compatibility: manylinux_2_28
           - platform: macos-arm64
             os: macos-14
@@ -106,10 +107,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- Linux (inside manylinux container) ---
-      # System deps already installed in ghcr.io/rerun-io/ci_docker:0.17.0
+      # --- Linux (inside manylinux_2_28 container) ---
+      # Replicates Rerun's ci_docker/Dockerfile setup inline
+      - name: Install system dependencies (manylinux)
+        if: matrix.container != ''
+        run: |
+          dnf install -y \
+            make automake gcc gcc-c++ kernel-devel \
+            cmake \
+            curl \
+            git \
+            atk at-spi2-atk \
+            fontconfig-devel \
+            freetype-devel \
+            glib2-devel \
+            gtk3-devel \
+            openssl-devel \
+            xcb-util-renderutil-devel \
+            xcb-util-devel \
+            xcb-util-wm-devel \
+            libxkbcommon-devel \
+            python3-pip
+          dnf clean all
 
-      - name: Set up Rust (manylinux)
+      - name: Install Rust (manylinux)
+        if: matrix.container != ''
+        env:
+          RUSTUP_HOME: /usr/local/rustup
+          CARGO_HOME: /usr/local/cargo
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "/usr/local/cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Rust toolchain (manylinux)
         if: matrix.container != ''
         run: |
           rustup install
@@ -118,7 +148,8 @@ jobs:
       - name: Install maturin (manylinux)
         if: matrix.container != ''
         run: |
-          pip3 install maturin>=1.8.1
+          python3 -m pip install --upgrade pip
+          python3 -m pip install maturin>=1.8.1
 
       - name: Build wheel (manylinux)
         if: matrix.container != ''
