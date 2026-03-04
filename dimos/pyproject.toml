@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "dimos-viewer"
-version = "0.30.0a1"
+version = "0.30.0a2"
 description = "Interactive Rerun viewer for DimOS with click-to-navigate support"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,7 +16,6 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Visualization",
     "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
     "License :: OSI Approved :: MIT License",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
@@ -34,7 +33,5 @@ issues = "https://github.com/dimensionalOS/dimos-viewer/issues"
 bindings = "bin"
 manifest-path = "Cargo.toml"
 locked = false
-# Include the Python wrapper package alongside the binary
-python-packages = ["dimos_viewer"]
 # Strip binaries to reduce wheel size
 strip = true
