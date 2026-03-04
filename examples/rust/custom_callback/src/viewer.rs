@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use clap::Parser;
 use custom_callback::interaction::{LcmPublisher, click_event_from_ms};
 use rerun::external::{eframe, re_crash_handler, re_grpc_server, re_log, re_memory, re_viewer};
 
@@ -15,16 +16,53 @@ const LCM_CHANNEL: &str = "/clicked_point#geometry_msgs.PointStamped";
 const CLICK_DEBOUNCE_MS: u64 = 100;
 /// Maximum rapid clicks to log as warning
 const RAPID_CLICK_THRESHOLD: usize = 5;
+/// Default gRPC listen port (9877 to avoid conflict with stock Rerun on 9876)
+const DEFAULT_PORT: u16 = 9877;
+
+/// DimOS Interactive Viewer — a custom Rerun viewer with LCM click-to-navigate.
+///
+/// Accepts the same CLI flags as the stock `rerun` binary so it can be spawned
+/// seamlessly via `rerun_bindings.spawn(executable_name="dimos-viewer")`.
+#[derive(Parser, Debug)]
+#[command(name = "dimos-viewer", version, about)]
+struct Args {
+    /// The gRPC port to listen on for incoming SDK connections.
+    #[arg(long, default_value_t = DEFAULT_PORT)]
+    port: u16,
+
+    /// An upper limit on how much memory the viewer should use.
+    /// When this limit is reached, the oldest data will be dropped.
+    /// Examples: "75%", "16GB".
+    #[arg(long, default_value = "75%")]
+    memory_limit: String,
+
+    /// An upper limit on how much memory the gRPC server should use.
+    /// Examples: "1GiB", "50%".
+    #[arg(long, default_value = "1GiB")]
+    server_memory_limit: String,
+
+    /// Hide the Rerun welcome screen.
+    #[arg(long)]
+    hide_welcome_screen: bool,
+
+    /// Hint that data will arrive shortly (suppresses "waiting for data" message).
+    #[arg(long)]
+    expect_data_soon: bool,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+
     let main_thread_token = re_viewer::MainThreadToken::i_promise_i_am_on_the_main_thread();
     re_log::setup_logging();
     re_crash_handler::install_crash_handlers(re_viewer::build_info());
 
     // Listen for gRPC connections from Rerun's logging SDKs.
+    let listen_addr = format!("0.0.0.0:{}", args.port);
+    re_log::info!("Listening for SDK connections on {listen_addr}");
     let rx_log = re_grpc_server::spawn_with_recv(
-        "0.0.0.0:9877".parse()?,
+        listen_addr.parse()?,
         Default::default(),
         re_grpc_server::shutdown::never(),
     );
@@ -32,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create LCM publisher for click events
     let lcm_publisher = LcmPublisher::new(LCM_CHANNEL.to_string())
         .expect("Failed to create LCM publisher");
-    re_log::info!("LCM publisher created for channel: {}", LCM_CHANNEL);
+    re_log::info!("LCM publisher created for channel: {LCM_CHANNEL}");
 
     // State for debouncing and rapid click detection
     let last_click_time = Rc::new(RefCell::new(Instant::now()));
@@ -108,7 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         );
                                     }
                                     Err(err) => {
-                                        re_log::error!("Failed to publish LCM click event: {:?}", err);
+                                        re_log::error!("Failed to publish LCM click event: {err:?}");
                                     }
                                 }
                             }
@@ -121,8 +159,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     if !has_position && no_position_count > 0 {
                         re_log::trace!(
-                            "Selection change without position data ({} items). This is normal for hover/keyboard navigation.",
-                            no_position_count
+                            "Selection change without position data ({no_position_count} items). \
+                             This is normal for hover/keyboard navigation."
                         );
                     }
                 }
