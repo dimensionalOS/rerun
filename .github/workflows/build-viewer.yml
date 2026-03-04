@@ -220,11 +220,10 @@ jobs:
       - name: Install wheel
         run: pip install dist/*.whl
 
-      - name: Verify binary and wrapper
+      - name: Verify binary
         run: |
           which dimos-viewer
-          python -c "from dimos_viewer import __version__; print(f'dimos-viewer v{__version__}')"
-          python -c "from dimos_viewer import _find_viewer_binary; print(f'binary: {_find_viewer_binary()}')"
+          dimos-viewer --help
 
   # -------------------------------------------------------------------
   # 4. Publish to PyPI (tag v* only)
