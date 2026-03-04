@@ -206,7 +206,6 @@ jobs:
     needs: [test-wheel]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
-    environment: pypi
     permissions:
       id-token: write
 
@@ -220,17 +219,11 @@ jobs:
 
       - run: ls -la dist/
 
-      - uses: actions/setup-python@v5
+      - name: Publish to PyPI (trusted publisher)
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install maturin
-        run: pip install maturin>=1.8.1
-
-      - name: Publish to PyPI
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: maturin upload --skip-existing dist/*.whl
+          packages-dir: dist/
+          skip-existing: true
 
   # -------------------------------------------------------------------
   # 5. GitHub Release  (tag v* only)
