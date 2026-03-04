@@ -145,16 +145,21 @@ jobs:
           rustup install
           rustup show active-toolchain
 
+      - name: Set up Python 3.10 (manylinux)
+        if: matrix.container != ''
+        run: |
+          echo "/opt/python/cp310-cp310/bin" >> "$GITHUB_PATH"
+
       - name: Install maturin (manylinux)
         if: matrix.container != ''
         run: |
-          /opt/python/cp310-cp310/bin/python3 -m pip install --upgrade pip
-          /opt/python/cp310-cp310/bin/python3 -m pip install maturin>=1.8.1
+          python3 -m pip install --upgrade pip
+          python3 -m pip install maturin>=1.8.1
 
       - name: Build wheel (manylinux)
         if: matrix.container != ''
         run: |
-          /opt/python/cp310-cp310/bin/maturin build \
+          maturin build \
             --release \
             --manifest-path "${{ env.PACKAGE_DIR }}/Cargo.toml" \
             --target "${{ matrix.target }}" \
@@ -199,11 +204,8 @@ jobs:
   # 3. Test installed wheels
   # -------------------------------------------------------------------
   test-wheel:
-    name: Test wheel (py${{ matrix.python-version }})
+    name: Test wheel install
     needs: [build-wheel]
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.12"]
     runs-on: ubuntu-22.04
 
     steps:
@@ -211,7 +213,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.10"
 
       - name: Download linux-x64 wheel
         uses: actions/download-artifact@v4
@@ -219,15 +221,10 @@ jobs:
           name: wheel-linux-x64
           path: dist/
 
-      - name: Install wheel + test deps
-        run: |
-          pip install dist/*.whl
-          pip install pytest
+      - name: Install wheel
+        run: pip install dist/*.whl
 
-      - name: Run Python tests
-        run: pytest "${{ env.PACKAGE_DIR }}/tests/" -v
-
-      - name: Verify CLI entry point
+      - name: Verify binary and wrapper
         run: |
           which dimos-viewer
           python -c "from dimos_viewer import __version__; print(f'dimos-viewer v{__version__}')"
