@@ -11,7 +11,7 @@
 
 [project]
 name = "rerun-workspace"
-version = "0.30.0a3"
+version = "0.30.0a4"
 description = "Rerun Python workspace"
 requires-python = ">=3.10,<3.13"
 
