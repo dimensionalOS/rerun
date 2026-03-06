@@ -15,7 +15,7 @@ const CMD_VEL_CHANNEL: &str = "/cmd_vel#geometry_msgs.Twist";
 
 /// Base speeds for keyboard control
 const BASE_LINEAR_SPEED: f64 = 0.5;   // m/s
-const BASE_ANGULAR_SPEED: f64 = 0.5;  // rad/s
+const BASE_ANGULAR_SPEED: f64 = 0.8;  // rad/s
 const FAST_MULTIPLIER: f64 = 2.0;     // Shift modifier
 
 /// Overlay styling
