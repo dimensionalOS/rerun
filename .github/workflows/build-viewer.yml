@@ -250,16 +250,34 @@ jobs:
           path: dist/*.whl
 
   # -------------------------------------------------------------------
-  # 3. Test installed wheels
+  # 3. Test installed wheels (x64 + arm64)
   # -------------------------------------------------------------------
   test-wheel:
-    name: Test wheel (py${{ matrix.python-version }})
+    name: Test wheel (${{ matrix.arch }}-py${{ matrix.python-version }})
     needs: [build-wheel]
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        include:
+          - python-version: "3.10"
+            os: ubuntu-22.04
+            arch: x64
+          - python-version: "3.11"
+            os: ubuntu-22.04
+            arch: x64
+          - python-version: "3.12"
+            os: ubuntu-22.04
+            arch: x64
+          - python-version: "3.10"
+            os: ubuntu-22.04-arm
+            arch: arm64
+          - python-version: "3.11"
+            os: ubuntu-22.04-arm
+            arch: arm64
+          - python-version: "3.12"
+            os: ubuntu-22.04-arm
+            arch: arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -268,10 +286,10 @@ jobs:
         with:
           python-version: "${{ matrix.python-version }}"
 
-      - name: Download linux wheel
+      - name: Download wheel
         uses: actions/download-artifact@v4
         with:
-          name: wheel-linux-x64-py${{ matrix.python-version }}
+          name: wheel-linux-${{ matrix.arch }}-py${{ matrix.python-version }}
           path: dist/
 
       - name: Install wheel
