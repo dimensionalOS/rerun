@@ -113,9 +113,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Listen for gRPC connections from Rerun's logging SDKs.
     let listen_addr = format!("0.0.0.0:{}", args.port);
     re_log::info!("Listening for SDK connections on {listen_addr}");
+    let server_memory_limit = re_memory::MemoryLimit::parse(&args.server_memory_limit)
+        .expect("Bad --server-memory-limit");
     let rx_log = re_grpc_server::spawn_with_recv(
         listen_addr.parse()?,
-        Default::default(),
+        re_grpc_server::ServerOptions {
+            memory_limit: server_memory_limit,
+            ..Default::default()
+        },
         re_grpc_server::shutdown::never(),
     );
 
@@ -140,7 +145,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app_env = re_viewer::AppEnvironment::Custom("DimOS Interactive Viewer".to_owned());
 
+    let memory_limit = re_memory::MemoryLimit::parse(&args.memory_limit)
+        .expect("Bad --memory-limit");
+    re_log::info!("Memory limit: {memory_limit}");
+
     let startup_options = re_viewer::StartupOptions {
+        memory_limit,
         on_event: Some(Rc::new({
             let last_click_time = last_click_time.clone();
             let rapid_click_count = rapid_click_count.clone();
