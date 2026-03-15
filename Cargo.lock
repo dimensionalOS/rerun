@@ -3110,12 +3110,11 @@ dependencies = [
 
 [[package]]
 name = "dimos-viewer"
-version = "0.30.0-alpha.1+dev"
+version = "0.30.0-alpha.4"
 dependencies = [
  "bincode",
  "clap",
  "mimalloc",
- "parking_lot",
  "rerun",
  "serde",
  "tokio",

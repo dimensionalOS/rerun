@@ -61,10 +61,13 @@ pub struct ClickEvent {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+
     /// Rerun entity path (stored in frame_id per our convention).
     pub entity_path: String,
+
     /// Unix timestamp in seconds.
     pub timestamp_sec: i32,
+
     /// Nanosecond remainder.
     pub timestamp_nsec: i32,
 }

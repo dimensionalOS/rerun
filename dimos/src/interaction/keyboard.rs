@@ -1,5 +1,5 @@
 //! Keyboard handler for WASD movement controls that publish Twist messages.
-//! 
+//!
 //! Converts keyboard input to robot velocity commands following teleop conventions:
 //! - WASD/arrows for linear/angular motion
 //! - QE for strafing
@@ -98,8 +98,8 @@ impl KeyboardHandler {
         // If not engaged, don't capture any keys
         if !self.engaged {
             if self.was_active {
-                if let Err(e) = self.publish_stop() {
-                    re_log::warn!("Failed to send stop on disengage: {e:?}");
+                if let Err(err) = self.publish_stop() {
+                    re_log::warn!("Failed to send stop on disengage: {err:?}");
                 }
                 self.was_active = false;
             }
@@ -112,8 +112,8 @@ impl KeyboardHandler {
         // Check for emergency stop (Space key pressed - one-shot action)
         if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
             self.state.reset();
-            if let Err(e) = self.publish_stop() {
-                re_log::warn!("Failed to send emergency stop: {e:?}");
+            if let Err(err) = self.publish_stop() {
+                re_log::warn!("Failed to send emergency stop: {err:?}");
             }
             self.was_active = false;
             self.estop_flash = true;
@@ -122,13 +122,13 @@ impl KeyboardHandler {
 
         // Publish twist command if keys are active, or stop if just released
         if self.state.any_active() {
-            if let Err(e) = self.publish_twist() {
-                re_log::warn!("Failed to publish twist command: {e:?}");
+            if let Err(err) = self.publish_twist() {
+                re_log::warn!("Failed to publish twist command: {err:?}");
             }
             self.was_active = true;
         } else if self.was_active {
-            if let Err(e) = self.publish_stop() {
-                re_log::warn!("Failed to send stop on key release: {e:?}");
+            if let Err(err) = self.publish_stop() {
+                re_log::warn!("Failed to send stop on key release: {err:?}");
             }
             self.was_active = false;
         }
@@ -188,8 +188,8 @@ impl KeyboardHandler {
                     self.engaged = !self.engaged;
                     if !self.engaged {
                         // Send stop when disengaging
-                        if let Err(e) = self.publish_stop() {
-                            re_log::warn!("Failed to send stop on disengage: {e:?}");
+                        if let Err(err) = self.publish_stop() {
+                            re_log::warn!("Failed to send stop on disengage: {err:?}");
                         }
                         self.state.reset();
                         self.was_active = false;
@@ -204,8 +204,8 @@ impl KeyboardHandler {
             && ctx.input(|i| i.pointer.primary_clicked())
         {
             self.engaged = false;
-            if let Err(e) = self.publish_stop() {
-                re_log::warn!("Failed to send stop on outside click: {e:?}");
+            if let Err(err) = self.publish_stop() {
+                re_log::warn!("Failed to send stop on outside click: {err:?}");
             }
             self.state.reset();
             self.was_active = false;

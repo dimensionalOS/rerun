@@ -12,10 +12,13 @@ static GLOBAL: re_memory::AccountingAllocator<mimalloc::MiMalloc> =
 
 /// LCM channel for click events (follows RViz convention)
 const LCM_CHANNEL: &str = "/clicked_point#geometry_msgs.PointStamped";
+
 /// Minimum time between click events (debouncing)
 const CLICK_DEBOUNCE_MS: u64 = 100;
+
 /// Maximum rapid clicks to log as warning
 const RAPID_CLICK_THRESHOLD: usize = 5;
+
 /// Default gRPC listen port (9877 to avoid conflict with stock Rerun on 9876)
 const DEFAULT_PORT: u16 = 9877;
 
@@ -231,7 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         );
                                     }
                                     Err(err) => {
-                                        re_log::error!("Failed to publish LCM click event: {err:?}");
+                                        re_log::error!("Failed to publish LCM click event: {err}");
                                     }
                                 }
                             }
