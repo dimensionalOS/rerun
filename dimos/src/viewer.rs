@@ -4,7 +4,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use clap::Parser;
 use dimos_viewer::interaction::{LcmPublisher, KeyboardHandler, click_event_from_ms};
-use rerun::external::{eframe, egui, re_crash_handler, re_grpc_server, re_log, re_memory, re_viewer};
+use rerun::external::{eframe, egui, re_crash_handler, re_grpc_client, re_grpc_server, re_log, re_memory, re_uri, re_viewer};
 
 #[global_allocator]
 static GLOBAL: re_memory::AccountingAllocator<mimalloc::MiMalloc> =
@@ -12,10 +12,13 @@ static GLOBAL: re_memory::AccountingAllocator<mimalloc::MiMalloc> =
 
 /// LCM channel for click events (follows RViz convention)
 const LCM_CHANNEL: &str = "/clicked_point#geometry_msgs.PointStamped";
+
 /// Minimum time between click events (debouncing)
 const CLICK_DEBOUNCE_MS: u64 = 100;
+
 /// Maximum rapid clicks to log as warning
 const RAPID_CLICK_THRESHOLD: usize = 5;
+
 /// Default gRPC listen port (9877 to avoid conflict with stock Rerun on 9876)
 const DEFAULT_PORT: u16 = 9877;
 
@@ -48,6 +51,16 @@ struct Args {
     /// Hint that data will arrive shortly (suppresses "waiting for data" message).
     #[arg(long)]
     expect_data_soon: bool,
+
+    /// Do not start a local gRPC server; instead connect to an existing one.
+    ///
+    /// Optionally accepts a URL to a gRPC proxy server.
+    /// The scheme must be one of `rerun://`, `rerun+http://`, or `rerun+https://`,
+    /// and the pathname must be `/proxy`.
+    ///
+    /// Defaults to `rerun+http://127.0.0.1:<port>/proxy`.
+    #[arg(long)]
+    connect: Option<Option<String>>,
 }
 
 /// Wraps re_viewer::App to add keyboard control interception.
@@ -73,7 +86,7 @@ impl eframe::App for DimosApp {
         // Process keyboard input before delegating to Rerun
         self.keyboard.process(ui.ctx());
 
-        // Always draw the keyboard HUD overlay (dims when inactive)
+        // Draw the keyboard HUD overlay (click to engage/disengage)
         self.keyboard.draw_overlay(ui.ctx());
 
         // Delegate to Rerun's main ui method
@@ -110,19 +123,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     re_log::setup_logging();
     re_crash_handler::install_crash_handlers(re_viewer::build_info());
 
-    // Listen for gRPC connections from Rerun's logging SDKs.
-    let listen_addr = format!("0.0.0.0:{}", args.port);
-    re_log::info!("Listening for SDK connections on {listen_addr}");
-    let server_memory_limit = re_memory::MemoryLimit::parse(&args.server_memory_limit)
-        .expect("Bad --server-memory-limit");
-    let rx_log = re_grpc_server::spawn_with_recv(
-        listen_addr.parse()?,
-        re_grpc_server::ServerOptions {
-            memory_limit: server_memory_limit,
-            ..Default::default()
-        },
-        re_grpc_server::shutdown::never(),
-    );
+    // Either connect to an existing gRPC proxy, or spawn a local server.
+    let rx_log = if let Some(url) = args.connect.clone() {
+        let url = url.unwrap_or_else(|| format!("rerun+http://127.0.0.1:{}/proxy", args.port));
+        let proxy_uri: re_uri::ProxyUri = url.parse()
+            .expect("Bad --connect URL: expected format rerun+http://host:port/proxy");
+        re_log::info!("Connecting to existing gRPC proxy at {proxy_uri}");
+        re_grpc_client::stream(proxy_uri)
+    } else {
+        let listen_addr = format!("0.0.0.0:{}", args.port);
+        re_log::info!("Listening for SDK connections on {listen_addr}");
+        let server_memory_limit = re_memory::MemoryLimit::parse(&args.server_memory_limit)
+            .expect("Bad --server-memory-limit");
+        re_grpc_server::spawn_with_recv(
+            listen_addr.parse()?,
+            re_grpc_server::ServerOptions {
+                memory_limit: server_memory_limit,
+                ..Default::default()
+            },
+            re_grpc_server::shutdown::never(),
+        )
+    };
 
     // Create LCM publisher for click events
     let lcm_publisher = LcmPublisher::new(LCM_CHANNEL.to_string())
@@ -132,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create keyboard handler
     let keyboard_handler = KeyboardHandler::new()
         .expect("Failed to create keyboard handler");
-    re_log::info!("Keyboard handler initialized for WASD controls on /cmd_vel");
+
 
     // State for debouncing and rapid click detection
     let last_click_time = Rc::new(RefCell::new(Instant::now()));
@@ -213,7 +234,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         );
                                     }
                                     Err(err) => {
-                                        re_log::error!("Failed to publish LCM click event: {err:?}");
+                                        re_log::error!("Failed to publish LCM click event: {err}");
                                     }
                                 }
                             }

@@ -29,7 +29,6 @@ rerun = { path = "../crates/top/rerun", default-features = false, features = [
 clap = { workspace = true, features = ["derive"] }
 bincode.workspace = true
 mimalloc.workspace = true
-parking_lot.workspace = true
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = [
   "io-util",
@@ -40,3 +39,6 @@ tokio = { workspace = true, features = [
   "sync",
   "time",
 ] }
+
+[lints]
+workspace = true
